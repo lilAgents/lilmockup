@@ -630,6 +630,13 @@ html[data-theme="dark"] .seg__btn.is-active {
   background: repeating-conic-gradient(var(--field) 0% 25%, var(--panel) 0% 50%) 50% / 22px 22px;
   border: 1px solid var(--line);
 }
+/* opaque backdrops: no checkerboard, no border, no rounding, so the
+   preview shows exactly what the exported PNG looks like */
+#canvas.canvas--opaque {
+  background: none;
+  border: 0;
+  border-radius: 0;
+}
 .mock-actions {
   display: flex;
   gap: 9px;

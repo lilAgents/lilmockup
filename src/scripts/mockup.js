@@ -78,6 +78,9 @@ function coverDraw(ctx, img, x, y, w, h) {
 /* ---------- rendering ---------- */
 function render() {
   if (!state.bitmap) return;
+  // the checkerboard is a CSS hint for transparency; hide it once the
+  // backdrop is opaque so no sliver of it peeks out at fractional sizes
+  $('#canvas').classList.toggle('canvas--opaque', state.bg !== 'none');
   if (FRAME_DEFS[state.frame]) renderDevice();
   else renderBrowser();
 }
@@ -95,48 +98,59 @@ function renderBrowser() {
   const frameH = H + barH;
   const pad = state.bg === 'none' ? Math.round(frameW * 0.04) : Math.round(frameW * 0.085);
 
+  // Compose the framed unit square-cornered on its own layer, then cut the
+  // rounded corners once with destination-in. clip() is not anti-aliased
+  // reliably (Skia), and clipping over the already-painted chrome fill
+  // leaves a light fringe around the curve on dark backdrops; masking the
+  // layer yields one clean alpha edge that composites over anything.
+  const off = document.createElement('canvas');
+  off.width = frameW;
+  off.height = frameH;
+  const o = off.getContext('2d');
+  o.fillStyle = dark ? '#2b2e33' : '#f1f3f4';
+  o.fillRect(0, 0, frameW, frameH);
+
+  // traffic lights
+  const cy = barH / 2;
+  const r = Math.max(5, Math.round(barH * 0.13));
+  const startX = Math.round(barH * 0.55);
+  ['#ff5f57', '#febc2e', '#28c840'].forEach((c, i) => {
+    o.fillStyle = c;
+    o.beginPath();
+    o.arc(startX + i * r * 2.9, cy, r, 0, Math.PI * 2);
+    o.fill();
+  });
+  // url pill
+  const pillX = startX + 3 * r * 2.9 + Math.round(barH * 0.35);
+  const pillW = Math.round(frameW * 0.52);
+  const pillH = Math.round(barH * 0.58);
+  o.fillStyle = dark ? '#1c1f24' : '#ffffff';
+  rr(o, pillX, cy - pillH / 2, pillW, pillH, pillH / 2);
+  o.fill();
+  o.fillStyle = dark ? '#9aa3b0' : '#5f6368';
+  o.font = `${Math.round(pillH * 0.52)}px -apple-system, "Segoe UI", Arial, sans-serif`;
+  o.textBaseline = 'middle';
+  o.fillText(state.url || 'yoursite.com', pillX + Math.round(pillH * 0.6), cy + 1, pillW - pillH);
+  // screenshot below the bar
+  o.drawImage(img, 0, barH, W, H);
+  // round the corners of the whole unit in one pass
+  o.globalCompositeOperation = 'destination-in';
+  rr(o, 0, 0, frameW, frameH, radius);
+  o.fill();
+  o.globalCompositeOperation = 'source-over';
+
   canvas.width = frameW + pad * 2;
   canvas.height = frameH + pad * 2;
   const ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   drawBackdrop(ctx, canvas);
 
-  // soft shadow under the frame
+  // soft shadow cast from the unit's own alpha
   ctx.save();
   ctx.shadowColor = 'rgba(10, 14, 30, 0.35)';
   ctx.shadowBlur = Math.round(frameW * 0.025);
   ctx.shadowOffsetY = Math.round(frameW * 0.008);
-  ctx.fillStyle = dark ? '#2b2e33' : '#f1f3f4';
-  rr(ctx, pad, pad, frameW, frameH, radius);
-  ctx.fill();
-  ctx.restore();
-
-  // traffic lights
-  const cy = pad + barH / 2;
-  const r = Math.max(5, Math.round(barH * 0.13));
-  const startX = pad + Math.round(barH * 0.55);
-  ['#ff5f57', '#febc2e', '#28c840'].forEach((c, i) => {
-    ctx.fillStyle = c;
-    ctx.beginPath();
-    ctx.arc(startX + i * r * 2.9, cy, r, 0, Math.PI * 2);
-    ctx.fill();
-  });
-  // url pill
-  const pillX = startX + 3 * r * 2.9 + Math.round(barH * 0.35);
-  const pillW = Math.round(frameW * 0.52);
-  const pillH = Math.round(barH * 0.58);
-  ctx.fillStyle = dark ? '#1c1f24' : '#ffffff';
-  rr(ctx, pillX, cy - pillH / 2, pillW, pillH, pillH / 2);
-  ctx.fill();
-  ctx.fillStyle = dark ? '#9aa3b0' : '#5f6368';
-  ctx.font = `${Math.round(pillH * 0.52)}px -apple-system, "Segoe UI", Arial, sans-serif`;
-  ctx.textBaseline = 'middle';
-  ctx.fillText(state.url || 'yoursite.com', pillX + Math.round(pillH * 0.6), cy + 1, pillW - pillH);
-  // screenshot below the bar (squared bottom corners stay inside the frame radius)
-  ctx.save();
-  rr(ctx, pad, pad, frameW, frameH, radius);
-  ctx.clip();
-  ctx.drawImage(img, pad, pad + barH, W, H);
+  ctx.drawImage(off, pad, pad);
   ctx.restore();
 }
 
