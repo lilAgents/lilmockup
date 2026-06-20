@@ -158,6 +158,19 @@ function initMockup() {
   $('#f-url').addEventListener('input', (e) => { state.url = e.target.value.trim(); render(); });
 
   $('#f-file').addEventListener('change', (e) => loadFile(e.target.files[0]));
+
+  // paste a screenshot from the clipboard, anywhere on the page
+  document.addEventListener('paste', (e) => {
+    if (!e.clipboardData) return;
+    for (const item of e.clipboardData.items) {
+      if (item.type && item.type.startsWith('image/')) {
+        const f = item.getAsFile();
+        if (f) { e.preventDefault(); loadFile(f); }
+        return;
+      }
+    }
+  });
+
   const drop = $('#drop');
   ['dragover', 'dragenter'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('is-over'); }));
   ['dragleave', 'drop'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('is-over'); }));
