@@ -26,7 +26,7 @@ function initTheme() {
 }
 
 /* ---------- state + device frame assets ---------- */
-const state = { frame: 'browser-light', orient: 'portrait', bg: 'none', bgColor: '#eceef2', url: 'yoursite.com', bitmap: null };
+const state = { frame: 'browser-light', orient: 'portrait', bg: 'none', bgColor: '#eceef2', grad1: '#5a74ee', grad2: '#2f3fb0', url: 'yoursite.com', bitmap: null };
 
 // screen rects measured from the shipped PNGs (transparent cutouts)
 const FRAME_DEFS = {
@@ -58,8 +58,8 @@ function rr(ctx, x, y, w, h, r) {
 function drawBackdrop(ctx, canvas) {
   if (state.bg === 'gradient') {
     const g = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
-    g.addColorStop(0, '#5a74ee');
-    g.addColorStop(1, '#2f3fb0');
+    g.addColorStop(0, state.grad1);
+    g.addColorStop(1, state.grad2);
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   } else if (state.bg === 'color') {
@@ -246,9 +246,12 @@ function initMockup() {
     state.bg = b.dataset.bg;
     $$('[data-bg]').forEach((x) => x.classList.toggle('is-active', x === b));
     $('#bgcolor-field').classList.toggle('is-hidden', state.bg !== 'color');
+    $('#grad-field').classList.toggle('is-hidden', state.bg !== 'gradient');
     render();
   }));
   $('#f-bgcolor').addEventListener('input', (e) => { state.bgColor = e.target.value; render(); });
+  $('#f-grad1').addEventListener('input', (e) => { state.grad1 = e.target.value; render(); });
+  $('#f-grad2').addEventListener('input', (e) => { state.grad2 = e.target.value; render(); });
   $('#f-url').addEventListener('input', (e) => { state.url = e.target.value.trim(); render(); });
 
   $('#f-file').addEventListener('change', (e) => loadFile(e.target.files[0]));
