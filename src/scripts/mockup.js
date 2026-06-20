@@ -1,5 +1,6 @@
-// lilMockup: wrap a screenshot in browser chrome or a phone frame on a
-// canvas and export it as a PNG. Fully client-side.
+// lilMockup: wrap a screenshot in drawn browser chrome or a real device
+// frame PNG (laptop, phone) on a canvas and export it as a PNG. Fully
+// client-side.
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -24,8 +25,25 @@ function initTheme() {
   });
 }
 
-/* ---------- state ---------- */
-const state = { frame: 'browser-light', bg: 'none', bgColor: '#eceef2', url: 'yoursite.com', bitmap: null };
+/* ---------- state + device frame assets ---------- */
+const state = { frame: 'browser-light', orient: 'portrait', bg: 'none', bgColor: '#eceef2', url: 'yoursite.com', bitmap: null };
+
+// screen rects measured from the shipped PNGs (transparent cutouts)
+const FRAME_DEFS = {
+  laptop: { src: '/frames/laptop.png', screen: { x: 239, y: 69, w: 1542, h: 954 } },
+  phone: { src: '/frames/phone.png', screen: { x: 364, y: 337, w: 772, h: 1370 } },
+};
+const frameImgs = {};
+
+function ensureFrames() {
+  for (const [name, def] of Object.entries(FRAME_DEFS)) {
+    fetch(def.src)
+      .then((r) => r.blob())
+      .then((b) => createImageBitmap(b))
+      .then((bmp) => { frameImgs[name] = bmp; render(); })
+      .catch(() => {});
+  }
+}
 
 function rr(ctx, x, y, w, h, r) {
   ctx.beginPath();
@@ -37,32 +55,7 @@ function rr(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
-/* ---------- rendering ---------- */
-function render() {
-  if (!state.bitmap) return;
-  const img = state.bitmap;
-  const W = img.width, H = img.height;
-  const canvas = $('#canvas');
-  const ctx2 = () => canvas.getContext('2d');
-
-  const phone = state.frame === 'phone';
-  const dark = state.frame === 'browser-dark';
-
-  // frame metrics scale with the screenshot so exports stay crisp
-  const barH = phone ? 0 : Math.min(96, Math.max(44, Math.round(W * 0.052)));
-  const bezel = phone ? Math.min(48, Math.max(20, Math.round(W * 0.045))) : 0;
-  const radius = phone ? Math.min(88, Math.max(36, Math.round(W * 0.085))) : Math.round(barH * 0.28);
-
-  const frameW = W + bezel * 2;
-  const frameH = H + (phone ? bezel * 2 : barH);
-  const pad = state.bg === 'none' ? Math.round(frameW * 0.04) : Math.round(frameW * 0.085);
-
-  canvas.width = frameW + pad * 2;
-  canvas.height = frameH + pad * 2;
-  const ctx = ctx2();
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  // backdrop
+function drawBackdrop(ctx, canvas) {
   if (state.bg === 'gradient') {
     const g = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
     g.addColorStop(0, '#5a74ee');
@@ -73,58 +66,138 @@ function render() {
     ctx.fillStyle = state.bgColor;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
+}
+
+// draw img to cover the given rect, center-cropped (caller clips)
+function coverDraw(ctx, img, x, y, w, h) {
+  const s = Math.max(w / img.width, h / img.height);
+  const dw = img.width * s, dh = img.height * s;
+  ctx.drawImage(img, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
+}
+
+/* ---------- rendering ---------- */
+function render() {
+  if (!state.bitmap) return;
+  if (FRAME_DEFS[state.frame]) renderDevice();
+  else renderBrowser();
+}
+
+function renderBrowser() {
+  const img = state.bitmap;
+  const W = img.width, H = img.height;
+  const canvas = $('#canvas');
+  const dark = state.frame === 'browser-dark';
+
+  // frame metrics scale with the screenshot so exports stay crisp
+  const barH = Math.min(96, Math.max(44, Math.round(W * 0.052)));
+  const radius = Math.round(barH * 0.28);
+  const frameW = W;
+  const frameH = H + barH;
+  const pad = state.bg === 'none' ? Math.round(frameW * 0.04) : Math.round(frameW * 0.085);
+
+  canvas.width = frameW + pad * 2;
+  canvas.height = frameH + pad * 2;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawBackdrop(ctx, canvas);
 
   // soft shadow under the frame
   ctx.save();
   ctx.shadowColor = 'rgba(10, 14, 30, 0.35)';
   ctx.shadowBlur = Math.round(frameW * 0.025);
   ctx.shadowOffsetY = Math.round(frameW * 0.008);
-  ctx.fillStyle = phone ? '#15171c' : dark ? '#2b2e33' : '#f1f3f4';
+  ctx.fillStyle = dark ? '#2b2e33' : '#f1f3f4';
   rr(ctx, pad, pad, frameW, frameH, radius);
   ctx.fill();
   ctx.restore();
 
-  if (phone) {
-    // screen
-    ctx.save();
-    rr(ctx, pad + bezel, pad + bezel, W, H, Math.max(10, Math.round(radius * 0.45)));
-    ctx.clip();
-    ctx.drawImage(img, pad + bezel, pad + bezel, W, H);
-    ctx.restore();
-    // notch pill
-    const pillW = Math.round(W * 0.3), pillH = Math.max(10, Math.round(bezel * 0.42));
-    ctx.fillStyle = '#15171c';
-    rr(ctx, pad + bezel + (W - pillW) / 2, pad + bezel + Math.round(pillH * 0.6), pillW, pillH, pillH / 2);
+  // traffic lights
+  const cy = pad + barH / 2;
+  const r = Math.max(5, Math.round(barH * 0.13));
+  const startX = pad + Math.round(barH * 0.55);
+  ['#ff5f57', '#febc2e', '#28c840'].forEach((c, i) => {
+    ctx.fillStyle = c;
+    ctx.beginPath();
+    ctx.arc(startX + i * r * 2.9, cy, r, 0, Math.PI * 2);
     ctx.fill();
+  });
+  // url pill
+  const pillX = startX + 3 * r * 2.9 + Math.round(barH * 0.35);
+  const pillW = Math.round(frameW * 0.52);
+  const pillH = Math.round(barH * 0.58);
+  ctx.fillStyle = dark ? '#1c1f24' : '#ffffff';
+  rr(ctx, pillX, cy - pillH / 2, pillW, pillH, pillH / 2);
+  ctx.fill();
+  ctx.fillStyle = dark ? '#9aa3b0' : '#5f6368';
+  ctx.font = `${Math.round(pillH * 0.52)}px -apple-system, "Segoe UI", Arial, sans-serif`;
+  ctx.textBaseline = 'middle';
+  ctx.fillText(state.url || 'yoursite.com', pillX + Math.round(pillH * 0.6), cy + 1, pillW - pillH);
+  // screenshot below the bar (squared bottom corners stay inside the frame radius)
+  ctx.save();
+  rr(ctx, pad, pad, frameW, frameH, radius);
+  ctx.clip();
+  ctx.drawImage(img, pad, pad + barH, W, H);
+  ctx.restore();
+}
+
+function renderDevice() {
+  const img = state.bitmap;
+  const def = FRAME_DEFS[state.frame];
+  const fimg = frameImgs[state.frame];
+  if (!fimg) return; // ensureFrames re-renders once the PNG arrives
+  const landscape = state.frame === 'phone' && state.orient === 'landscape';
+
+  // scale the frame so the screenshot keeps its pixels, capped so the
+  // bezel art does not get stretched to mush
+  const screenW = landscape ? def.screen.h : def.screen.w;
+  const scale = Math.min(2.5, Math.max(1, img.width / screenW));
+  const fw = Math.round(fimg.width * scale), fh = Math.round(fimg.height * scale);
+  const outW = landscape ? fh : fw, outH = landscape ? fw : fh;
+
+  // compose in the frame's own portrait space, then rotate onto the canvas
+  const off = document.createElement('canvas');
+  off.width = fw;
+  off.height = fh;
+  const octx = off.getContext('2d');
+  const rx = def.screen.x * scale, ry = def.screen.y * scale;
+  const rw = def.screen.w * scale, rh = def.screen.h * scale;
+  const bleed = 2 * scale; // overdraw a hair so the cutout edge never shows a gap
+  const bx = rx - bleed, by = ry - bleed, bw = rw + bleed * 2, bh = rh + bleed * 2;
+  octx.save();
+  octx.beginPath();
+  octx.rect(bx, by, bw, bh);
+  octx.clip();
+  if (landscape) {
+    // counter-rotate the screenshot so it reads upright once the device lies on its side
+    octx.translate(rx + rw / 2, ry + rh / 2);
+    octx.rotate(Math.PI / 2);
+    coverDraw(octx, img, -bh / 2, -bw / 2, bh, bw);
   } else {
-    // traffic lights
-    const cy = pad + barH / 2;
-    const r = Math.max(5, Math.round(barH * 0.13));
-    const startX = pad + Math.round(barH * 0.55);
-    ['#ff5f57', '#febc2e', '#28c840'].forEach((c, i) => {
-      ctx.fillStyle = c;
-      ctx.beginPath();
-      ctx.arc(startX + i * r * 2.9, cy, r, 0, Math.PI * 2);
-      ctx.fill();
-    });
-    // url pill
-    const pillX = startX + 3 * r * 2.9 + Math.round(barH * 0.35);
-    const pillW = Math.round(frameW * 0.52);
-    const pillH = Math.round(barH * 0.58);
-    ctx.fillStyle = dark ? '#1c1f24' : '#ffffff';
-    rr(ctx, pillX, cy - pillH / 2, pillW, pillH, pillH / 2);
-    ctx.fill();
-    ctx.fillStyle = dark ? '#9aa3b0' : '#5f6368';
-    ctx.font = `${Math.round(pillH * 0.52)}px -apple-system, "Segoe UI", Arial, sans-serif`;
-    ctx.textBaseline = 'middle';
-    ctx.fillText(state.url || 'yoursite.com', pillX + Math.round(pillH * 0.6), cy + 1, pillW - pillH);
-    // screenshot below the bar (squared bottom corners stay inside the frame radius)
-    ctx.save();
-    rr(ctx, pad, pad, frameW, frameH, radius);
-    ctx.clip();
-    ctx.drawImage(img, pad, pad + barH, W, H);
-    ctx.restore();
+    coverDraw(octx, img, bx, by, bw, bh);
   }
+  octx.restore();
+  octx.drawImage(fimg, 0, 0, fw, fh);
+
+  const canvas = $('#canvas');
+  const pad = state.bg === 'none' ? Math.round(outW * 0.04) : Math.round(outW * 0.085);
+  canvas.width = outW + pad * 2;
+  canvas.height = outH + pad * 2;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawBackdrop(ctx, canvas);
+
+  ctx.save();
+  ctx.shadowColor = 'rgba(10, 14, 30, 0.3)';
+  ctx.shadowBlur = Math.round(outW * 0.02);
+  ctx.shadowOffsetY = Math.round(outW * 0.008);
+  if (landscape) {
+    ctx.translate(pad + outW / 2, pad + outH / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.drawImage(off, -fw / 2, -fh / 2);
+  } else {
+    ctx.drawImage(off, pad, pad);
+  }
+  ctx.restore();
 }
 
 /* ---------- wire-up ---------- */
@@ -141,11 +214,18 @@ function loadFile(file) {
 
 function initMockup() {
   initTheme();
+  ensureFrames();
 
   $$('[data-frame]').forEach((b) => b.addEventListener('click', () => {
     state.frame = b.dataset.frame;
     $$('[data-frame]').forEach((x) => x.classList.toggle('is-active', x === b));
-    $('#url-field').classList.toggle('is-hidden', state.frame === 'phone');
+    $('#url-field').classList.toggle('is-hidden', !state.frame.startsWith('browser'));
+    $('#orient-field').classList.toggle('is-hidden', state.frame !== 'phone');
+    render();
+  }));
+  $$('[data-orient]').forEach((b) => b.addEventListener('click', () => {
+    state.orient = b.dataset.orient;
+    $$('[data-orient]').forEach((x) => x.classList.toggle('is-active', x === b));
     render();
   }));
   $$('[data-bg]').forEach((b) => b.addEventListener('click', () => {

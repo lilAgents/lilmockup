@@ -75,12 +75,20 @@ const description =
             <div class="seg" role="group" aria-label="Frame">
               <button class="seg__btn is-active" data-frame="browser-light" type="button">Browser</button>
               <button class="seg__btn" data-frame="browser-dark" type="button">Browser dark</button>
+              <button class="seg__btn" data-frame="laptop" type="button">Laptop</button>
               <button class="seg__btn" data-frame="phone" type="button">Phone</button>
             </div>
           </div>
           <div class="field" id="url-field">
             <span class="field__label">Address bar text</span>
             <input id="f-url" type="text" autocomplete="off" spellcheck="false" placeholder="yoursite.com" value="yoursite.com" />
+          </div>
+          <div class="field is-hidden" id="orient-field">
+            <span class="field__label">Orientation</span>
+            <div class="seg" role="group" aria-label="Orientation">
+              <button class="seg__btn is-active" data-orient="portrait" type="button">Portrait</button>
+              <button class="seg__btn" data-orient="landscape" type="button">Landscape</button>
+            </div>
           </div>
           <div class="field">
             <span class="field__label">Backdrop</span>
@@ -96,7 +104,7 @@ const description =
               <input id="f-bgcolor" type="color" value="#eceef2" aria-label="Backdrop color" />
             </div>
           </div>
-          <p class="hint">Drop a screenshot on the right and it gets wrapped in clean chrome at full resolution, rendered with the canvas API on your machine. "None" keeps the backdrop transparent so the frame sits on whatever you paste it over.</p>
+          <p class="hint">Drop a screenshot on the right and it gets wrapped in clean browser chrome or a real device frame, rendered with the canvas API on your machine. Device screens crop to fill, so wide screenshots work best on the laptop and tall ones on the portrait phone. "None" keeps the backdrop transparent so the frame sits on whatever you paste it over.</p>
         </div>
       </section>
 
